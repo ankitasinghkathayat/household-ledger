@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Household Ledger</title>
+<title>Household Expenses</title>
 <meta name="description" content="Track your household budget and pantry stock." />
 
 <link rel="manifest" href="manifest.json" />
@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Ledger" />
+<meta name="apple-mobile-web-app-title" content="Household Expenses" />
 
 <!-- Android / general favicon -->
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
@@ -536,6 +536,22 @@ html, body {
     render();
   }
 
+  // Test-only helper: lets you see the carryover banner immediately instead
+  // of waiting for a real new month, by seeding a mock previous-month record
+  // (only if one doesn't already exist for real).
+  function previewCarryover() {
+    const key = monthKey(new Date());
+    const prevKey = prevMonthKey(key);
+    if (!data.months[prevKey]) {
+      data.months[prevKey] = { baseBudget: data.baseBudget, carryover: 0, carryoverHandled: true };
+    }
+    data.months[key].carryoverHandled = false;
+    showCarryoverInput = false;
+    saveData();
+    render();
+    showToast('Test mode: showing what next month\u2019s carryover banner looks like');
+  }
+
   function resetAll() {
     if (!confirm('This clears your budget, expenses, and pantry data permanently. Continue?')) return;
     data = { baseBudget: 600, months: {}, expenses: [], pantry: {} };
@@ -582,7 +598,7 @@ html, body {
 
     root.innerHTML = `
       <div class="pl-header">
-        <div class="pl-title"><span>Household Ledger</span><span class="pl-month">${monthLabel()}</span></div>
+        <div class="pl-title"><span>Household Expenses</span><span class="pl-month">${monthLabel()}</span></div>
       </div>
 
       <div class="pl-receipt">
@@ -628,7 +644,10 @@ html, body {
       <div class="pl-body" id="pl-body"></div>
 
       <div class="pl-footer-bar">
-        <button class="pl-reset-link" id="pl-reset-btn">Clear all data</button>
+        <div style="display:flex;gap:14px;">
+          <button class="pl-reset-link" id="pl-reset-btn">Clear all data</button>
+          ${leftover <= 0 ? `<button class="pl-reset-link" id="pl-preview-btn">Preview carryover (test)</button>` : ''}
+        </div>
         <span class="pl-save-status" id="plSaveStatus">Saved</span>
       </div>
     `;
@@ -643,6 +662,8 @@ html, body {
       btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
     });
     document.getElementById('pl-reset-btn').addEventListener('click', resetAll);
+    const previewBtn = document.getElementById('pl-preview-btn');
+    if (previewBtn) previewBtn.addEventListener('click', previewCarryover);
 
     const budgetDisplay = document.getElementById('pl-budget-display');
     budgetDisplay.addEventListener('click', () => {

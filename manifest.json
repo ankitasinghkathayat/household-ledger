@@ -1,6 +1,6 @@
 {
-  "name": "Household Ledger",
-  "short_name": "Ledger",
+  "name": "Household Expenses",
+  "short_name": "Expenses",
   "description": "Track your household budget and pantry stock.",
   "start_url": "./index.html",
   "scope": "./",
