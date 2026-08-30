@@ -1,0 +1,15 @@
+{
+  "name": "Household Ledger",
+  "short_name": "Ledger",
+  "description": "Track your household budget and pantry stock.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F3E9",
+  "theme_color": "#2B2B26",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

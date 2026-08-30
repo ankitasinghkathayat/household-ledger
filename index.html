@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Household Ledger</title>
+<meta name="description" content="Track your household budget and pantry stock." />
+
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#2B2B26" />
+
+<!-- iOS home screen support -->
+<link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Ledger" />
+
+<!-- Android / general favicon -->
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png" />
+</head>
+<body>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap');
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #F7F3E9;
+  min-height: 100%;
+}
+
+.pl-root {
+  --paper: #F7F3E9;
+  --paper-card: #FFFDF8;
+  --ink: #2B2B26;
+  --ink-soft: #6E6A5C;
+  --rule: #D9D1BA;
+  --red: #B33A3A;
+  --sage: #5C7A52;
+  --sage-soft: #E4EADF;
+  --mustard: #B9861F;
+  --mustard-soft: #F3E6C8;
+  --red-soft: #F3DEDE;
+
+  font-family: 'Work Sans', sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+  padding: 0;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  max-width: 560px;
+  min-height: 100vh;
+  margin: 0 auto;
+}
+.pl-root * { box-sizing: border-box; }
+.pl-mono { font-family: 'IBM Plex Mono', monospace; }
+
+.pl-header {
+  padding: 22px 24px 16px;
+  background: var(--paper);
+}
+.pl-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 700;
+  font-size: 18px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.pl-month { font-size: 12px; color: var(--ink-soft); font-weight: 500; }
+
+.pl-receipt {
+  background: var(--paper-card);
+  margin: 0 24px;
+  padding: 18px 20px 22px;
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+}
+.pl-line {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  padding: 5px 0;
+  color: var(--ink-soft);
+}
+.pl-line .pl-label { white-space: nowrap; }
+.pl-line .pl-dots { flex: 1; border-bottom: 1.5px dotted var(--rule); margin-bottom: 4px; }
+.pl-line .pl-val { white-space: nowrap; font-weight: 600; color: var(--ink); }
+.pl-line.pl-big { font-size: 20px; padding-top: 10px; }
+.pl-line.pl-big .pl-val { font-size: 22px; }
+.pl-remaining-pos .pl-val { color: var(--sage); }
+.pl-remaining-neg .pl-val { color: var(--red); }
+
+.pl-bar-track {
+  height: 8px;
+  border-radius: 5px;
+  background: var(--sage-soft);
+  margin: 12px 0 2px;
+  overflow: hidden;
+}
+.pl-bar-fill { height: 100%; background: var(--sage); transition: width .3s ease; }
+.pl-bar-fill.pl-over { background: var(--red); }
+.pl-bar-caption { font-size: 11px; color: var(--ink-soft); text-align: right; margin-top: 2px; }
+
+.pl-tear {
+  height: 12px;
+  margin: 0 24px;
+  background-image: radial-gradient(circle at 6px 0, transparent 6px, var(--paper) 6.5px);
+  background-size: 16px 12px;
+  background-repeat: repeat-x;
+  background-position: top;
+}
+
+.pl-tabs {
+  display: flex;
+  margin: 14px 24px 0;
+  border-bottom: 1.5px solid var(--rule);
+  gap: 4px;
+}
+.pl-tab {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 9px 12px;
+  cursor: pointer;
+  color: var(--ink-soft);
+  border: none;
+  background: none;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1.5px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pl-tab.pl-active { color: var(--ink); border-bottom-color: var(--ink); }
+.pl-tab-badge {
+  background: var(--red); color: #fff; border-radius: 8px;
+  font-size: 10px; padding: 1px 6px; font-weight: 700;
+}
+
+.pl-body { padding: 16px 24px 24px; min-height: 220px; }
+
+.pl-empty {
+  text-align: center;
+  padding: 34px 10px;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.pl-empty-icon { font-size: 26px; margin-bottom: 8px; }
+
+.pl-expense-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--rule);
+  gap: 10px;
+}
+.pl-expense-row:last-child { border-bottom: none; }
+.pl-expense-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pl-expense-name { font-weight: 600; font-size: 13.5px; }
+.pl-expense-meta { font-size: 11.5px; color: var(--ink-soft); }
+.pl-expense-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.pl-expense-cost { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 13.5px; }
+.pl-del-btn {
+  background: none; border: none; color: var(--ink-soft); cursor: pointer;
+  font-size: 15px; padding: 2px 4px; line-height: 1; border-radius: 4px;
+}
+.pl-del-btn:hover { color: var(--red); background: var(--red-soft); }
+
+.pl-section-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--ink-soft); font-weight: 600; margin: 18px 0 8px;
+}
+.pl-section-title:first-child { margin-top: 0; }
+
+.pl-cat-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; }
+.pl-cat-name { width: 108px; flex-shrink: 0; font-size: 12px; color: var(--ink-soft); }
+.pl-cat-track { flex: 1; height: 7px; background: var(--sage-soft); border-radius: 4px; overflow: hidden; }
+.pl-cat-fill { height: 100%; background: var(--sage); }
+.pl-cat-amt { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; width: 56px; text-align: right; flex-shrink: 0; }
+
+.pl-form-group { margin-bottom: 14px; }
+.pl-form-label {
+  display: block; font-size: 11.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--ink-soft); margin-bottom: 5px;
+}
+.pl-input, .pl-select {
+  width: 100%; padding: 9px 11px; border: 1.5px solid var(--rule); border-radius: 7px;
+  background: var(--paper-card); font-family: 'Work Sans', sans-serif; font-size: 13.5px;
+  color: var(--ink);
+}
+.pl-input:focus, .pl-select:focus { outline: none; border-color: var(--sage); }
+.pl-row2 { display: flex; gap: 10px; }
+.pl-row2 > div { flex: 1; }
+
+.pl-notice {
+  background: var(--mustard-soft); border: 1px solid var(--mustard);
+  border-radius: 7px; padding: 9px 11px; font-size: 12px; color: #6b5215;
+  margin-bottom: 14px; display: none; line-height: 1.45;
+}
+.pl-notice.pl-show { display: block; }
+.pl-notice b { color: #4a3a0e; }
+
+.pl-checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.pl-checkbox-row label { font-size: 13px; color: var(--ink); cursor: pointer; }
+.pl-checkbox-row input { width: 16px; height: 16px; accent-color: var(--sage); cursor: pointer; }
+
+.pl-submit-btn {
+  width: 100%; padding: 11px; background: var(--ink); color: var(--paper);
+  border: none; border-radius: 7px; font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600; font-size: 13px; letter-spacing: 0.04em; text-transform: uppercase;
+  cursor: pointer; margin-top: 4px;
+}
+.pl-submit-btn:hover { opacity: 0.88; }
+.pl-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.pl-pantry-card {
+  background: var(--paper-card); border-radius: 9px; padding: 12px 14px;
+  margin-bottom: 10px; box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+}
+.pl-pantry-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.pl-pantry-name { font-weight: 600; font-size: 14px; }
+.pl-pantry-cat { font-size: 11px; color: var(--ink-soft); margin-top: 1px; }
+.pl-stamp {
+  font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.05em; padding: 3px 8px; border-radius: 4px;
+  border: 1.5px solid currentColor; transform: rotate(-3deg); white-space: nowrap;
+  flex-shrink: 0;
+}
+.pl-stamp-out { color: var(--red); }
+.pl-stamp-low { color: var(--mustard); }
+.pl-stamp-ok { color: var(--sage); }
+
+.pl-pantry-bottom { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.pl-qty-controls { display: flex; align-items: center; gap: 8px; }
+.pl-qty-btn {
+  width: 26px; height: 26px; border-radius: 6px; border: 1.5px solid var(--rule);
+  background: var(--paper); font-size: 15px; font-weight: 600; cursor: pointer;
+  color: var(--ink); display: flex; align-items: center; justify-content: center;
+  line-height: 1;
+}
+.pl-qty-btn:hover { border-color: var(--ink); }
+.pl-qty-val { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 13.5px; min-width: 64px; text-align: center; }
+.pl-pantry-meta { font-size: 11px; color: var(--ink-soft); }
+.pl-pantry-remove {
+  background: none; border: none; color: var(--ink-soft); font-size: 11px;
+  cursor: pointer; text-decoration: underline; padding: 0;
+}
+.pl-pantry-remove:hover { color: var(--red); }
+
+.pl-footer-bar {
+  padding: 10px 24px 18px; display: flex; justify-content: space-between; align-items: center;
+}
+.pl-reset-link {
+  font-size: 11px; color: var(--ink-soft); background: none; border: none;
+  cursor: pointer; text-decoration: underline; padding: 0;
+}
+.pl-reset-link:hover { color: var(--red); }
+.pl-save-status { font-size: 11px; color: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
+
+.pl-toast {
+  position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--paper); padding: 9px 16px; border-radius: 8px;
+  font-size: 12.5px; font-family: 'IBM Plex Mono', monospace; z-index: 999;
+  opacity: 0; transition: opacity .25s ease; pointer-events: none;
+}
+.pl-toast.pl-visible { opacity: 1; }
+
+.pl-loading { padding: 60px 20px; text-align: center; color: var(--ink-soft); font-size: 13px; font-family: 'IBM Plex Mono', monospace; }
+</style>
+
+<div class="pl-root" id="plRoot">
+  <div class="pl-loading" id="plLoading">Loading your ledger…</div>
+</div>
+
+<script>
+(function() {
+  const CATEGORIES = ['Produce','Dairy & Eggs','Meat & Seafood','Bakery','Pantry Staples','Frozen','Household','Personal Care','Beverages','Other'];
+  const UNITS = ['pcs','pack','kg','g','l','ml','box','bottle','bag'];
+  const STORE_KEY = 'household-ledger-data';
+
+  let data = { budget: 600, expenses: [], pantry: {} };
+  let activeTab = 'overview';
+  let loaded = false;
+
+  const root = document.getElementById('plRoot');
+
+  function slug(name) { return name.trim().toLowerCase(); }
+  function fmt(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2); }
+  function todayISO() { return new Date().toISOString().slice(0,10); }
+  function niceDate(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+  function monthLabel() {
+    return new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
+  function isThisMonth(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    const n = new Date();
+    return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
+  }
+
+  // Local-storage backed persistence — this app is fully self-contained,
+  // all data stays on this device in the browser's local storage.
+  const storage = {
+    async get(key) {
+      const raw = localStorage.getItem(key);
+      return raw === null ? null : { key, value: raw };
+    },
+    async set(key, value) {
+      try {
+        localStorage.setItem(key, value);
+        return { key, value };
+      } catch (e) {
+        return null;
+      }
+    }
+  };
+
+  async function loadData() {
+    try {
+      const res = await storage.get(STORE_KEY);
+      if (res && res.value) {
+        const parsed = JSON.parse(res.value);
+        data = Object.assign({ budget: 600, expenses: [], pantry: {} }, parsed);
+      }
+    } catch (e) {
+      // corrupt or missing data — start fresh
+    }
+    loaded = true;
+    render();
+  }
+
+  let saveTimer = null;
+  function saveData() {
+    setSaveStatus('Saving…');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const result = await storage.set(STORE_KEY, JSON.stringify(data));
+      if (result) {
+        setSaveStatus('Saved');
+      } else {
+        setSaveStatus('Not saved — storage full?');
+        showToast('Could not save changes on this device.');
+      }
+    }, 250);
+  }
+
+  function setSaveStatus(text) {
+    const el = document.getElementById('plSaveStatus');
+    if (el) el.textContent = text;
+  }
+
+  function showToast(msg) {
+    let t = document.getElementById('plToast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'plToast';
+      t.className = 'pl-toast';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add('pl-visible');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('pl-visible'), 2600);
+  }
+
+  function stockStatus(item) {
+    if (item.quantity <= 0) return 'out';
+    if (item.quantity <= item.lowThreshold) return 'low';
+    return 'ok';
+  }
+
+  function lowStockCount() {
+    return Object.values(data.pantry).filter(p => stockStatus(p) !== 'ok').length;
+  }
+
+  // ---------- Actions ----------
+
+  function setBudget(val) {
+    const n = parseFloat(val);
+    data.budget = isNaN(n) ? 0 : n;
+    saveData();
+    render();
+  }
+
+  function addExpense(payload) {
+    const id = 'e' + Date.now() + Math.random().toString(36).slice(2,7);
+    data.expenses.unshift({
+      id,
+      name: payload.name.trim(),
+      category: payload.category,
+      cost: payload.cost,
+      qty: payload.qty,
+      unit: payload.unit,
+      date: todayISO(),
+    });
+
+    if (payload.trackPantry) {
+      const key = slug(payload.name);
+      const existing = data.pantry[key];
+      if (existing) {
+        existing.quantity += payload.qty;
+        existing.lastPurchased = todayISO();
+        existing.unit = payload.unit;
+      } else {
+        data.pantry[key] = {
+          name: payload.name.trim(),
+          category: payload.category,
+          quantity: payload.qty,
+          unit: payload.unit,
+          lowThreshold: payload.lowThreshold,
+          lastPurchased: todayISO(),
+        };
+      }
+    }
+    saveData();
+    showToast('Expense logged');
+  }
+
+  function deleteExpense(id) {
+    data.expenses = data.expenses.filter(e => e.id !== id);
+    saveData();
+    render();
+  }
+
+  function adjustPantryQty(key, delta) {
+    const item = data.pantry[key];
+    if (!item) return;
+    item.quantity = Math.max(0, Math.round((item.quantity + delta) * 100) / 100);
+    saveData();
+    render();
+  }
+
+  function removePantryItem(key) {
+    delete data.pantry[key];
+    saveData();
+    render();
+  }
+
+  function resetAll() {
+    if (!confirm('This clears your budget, expenses, and pantry data permanently. Continue?')) return;
+    data = { budget: 600, expenses: [], pantry: {} };
+    saveData();
+    render();
+  }
+
+  // ---------- Render ----------
+
+  function render() {
+    if (!loaded) return;
+
+    const spentThisMonth = data.expenses.filter(e => isThisMonth(e.date)).reduce((s,e) => s + e.cost, 0);
+    const remaining = data.budget - spentThisMonth;
+    const pct = data.budget > 0 ? Math.min(100, (spentThisMonth / data.budget) * 100) : 0;
+    const over = remaining < 0;
+    const lowCount = lowStockCount();
+
+    root.innerHTML = `
+      <div class="pl-header">
+        <div class="pl-title"><span>Household Ledger</span><span class="pl-month">${monthLabel()}</span></div>
+      </div>
+
+      <div class="pl-receipt">
+        <div class="pl-line">
+          <span class="pl-label">Monthly budget</span>
+          <span class="pl-dots"></span>
+          <span class="pl-val pl-mono" id="pl-budget-display" style="cursor:pointer;text-decoration:underline dotted;" title="Click to edit">${fmt(data.budget)}</span>
+        </div>
+        <div class="pl-line">
+          <span class="pl-label">Spent this month</span>
+          <span class="pl-dots"></span>
+          <span class="pl-val">${fmt(spentThisMonth)}</span>
+        </div>
+        <div class="pl-line pl-big ${over ? 'pl-remaining-neg' : 'pl-remaining-pos'}">
+          <span class="pl-label">${over ? 'Over budget' : 'Remaining'}</span>
+          <span class="pl-dots"></span>
+          <span class="pl-val">${fmt(Math.abs(remaining))}</span>
+        </div>
+        <div class="pl-bar-track"><div class="pl-bar-fill ${over ? 'pl-over' : ''}" style="width:${pct}%"></div></div>
+        <div class="pl-bar-caption">${pct.toFixed(0)}% of budget used</div>
+      </div>
+
+      <div class="pl-tear"></div>
+
+      <div class="pl-tabs">
+        <button class="pl-tab ${activeTab==='overview'?'pl-active':''}" data-tab="overview">Overview</button>
+        <button class="pl-tab ${activeTab==='add'?'pl-active':''}" data-tab="add">Add Expense</button>
+        <button class="pl-tab ${activeTab==='pantry'?'pl-active':''}" data-tab="pantry">Pantry ${lowCount > 0 ? `<span class="pl-tab-badge">${lowCount}</span>` : ''}</button>
+      </div>
+
+      <div class="pl-body" id="pl-body"></div>
+
+      <div class="pl-footer-bar">
+        <button class="pl-reset-link" id="pl-reset-btn">Clear all data</button>
+        <span class="pl-save-status" id="plSaveStatus">Saved</span>
+      </div>
+    `;
+
+    renderBody(spentThisMonth);
+    attachHeaderEvents();
+  }
+
+  function attachHeaderEvents() {
+    document.querySelectorAll('.pl-tab').forEach(btn => {
+      btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
+    });
+    document.getElementById('pl-reset-btn').addEventListener('click', resetAll);
+    const budgetDisplay = document.getElementById('pl-budget-display');
+    budgetDisplay.addEventListener('click', () => {
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.step = '0.01';
+      input.value = data.budget;
+      input.className = 'pl-mono';
+      input.style.cssText = 'width:90px;font-weight:600;font-size:14px;border:1px solid var(--rule);border-radius:4px;padding:1px 4px;';
+      budgetDisplay.replaceWith(input);
+      input.focus();
+      input.select();
+      const commit = () => { setBudget(input.value); };
+      input.addEventListener('blur', commit);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+    });
+  }
+
+  function renderBody(spentThisMonth) {
+    const body = document.getElementById('pl-body');
+    if (activeTab === 'overview') body.innerHTML = overviewHTML(spentThisMonth);
+    else if (activeTab === 'add') body.innerHTML = addExpenseHTML();
+    else body.innerHTML = pantryHTML();
+
+    if (activeTab === 'overview') attachOverviewEvents();
+    if (activeTab === 'add') attachAddEvents();
+    if (activeTab === 'pantry') attachPantryEvents();
+  }
+
+  function overviewHTML(spentThisMonth) {
+    const recent = data.expenses.slice(0, 8);
+    const catTotals = {};
+    data.expenses.filter(e => isThisMonth(e.date)).forEach(e => {
+      catTotals[e.category] = (catTotals[e.category] || 0) + e.cost;
+    });
+    const catEntries = Object.entries(catTotals).sort((a,b) => b[1]-a[1]);
+    const maxCat = catEntries.length ? catEntries[0][1] : 0;
+    const lowItems = Object.entries(data.pantry).filter(([,p]) => stockStatus(p) !== 'ok');
+
+    let html = '';
+
+    if (lowItems.length > 0) {
+      html += `<div class="pl-section-title">Needs attention</div>`;
+      html += lowItems.slice(0,4).map(([key, p]) => {
+        const st = stockStatus(p);
+        return `<div class="pl-expense-row">
+          <div class="pl-expense-main">
+            <span class="pl-expense-name">${escapeHTML(p.name)}</span>
+            <span class="pl-expense-meta">${p.quantity} ${p.unit} left</span>
+          </div>
+          <span class="pl-stamp pl-stamp-${st}">${st === 'out' ? 'OUT OF STOCK' : 'LOW STOCK'}</span>
+        </div>`;
+      }).join('');
+    }
+
+    html += `<div class="pl-section-title">Spending by category</div>`;
+    if (catEntries.length === 0) {
+      html += `<div class="pl-empty" style="padding:14px 10px;">No spending logged this month yet.</div>`;
+    } else {
+      html += catEntries.map(([cat, amt]) => `
+        <div class="pl-cat-row">
+          <span class="pl-cat-name">${cat}</span>
+          <div class="pl-cat-track"><div class="pl-cat-fill" style="width:${(amt/maxCat)*100}%"></div></div>
+          <span class="pl-cat-amt">${fmt(amt)}</span>
+        </div>`).join('');
+    }
+
+    html += `<div class="pl-section-title">Recent purchases</div>`;
+    if (recent.length === 0) {
+      html += `<div class="pl-empty"><div class="pl-empty-icon">🧾</div>No expenses logged yet.<br>Add your first purchase to start tracking.</div>`;
+    } else {
+      html += recent.map(e => `
+        <div class="pl-expense-row">
+          <div class="pl-expense-main">
+            <span class="pl-expense-name">${escapeHTML(e.name)}</span>
+            <span class="pl-expense-meta">${e.category} · ${niceDate(e.date)} · ${e.qty} ${e.unit}</span>
+          </div>
+          <div class="pl-expense-right">
+            <span class="pl-expense-cost">${fmt(e.cost)}</span>
+            <button class="pl-del-btn" data-del="${e.id}" title="Delete">✕</button>
+          </div>
+        </div>`).join('');
+    }
+
+    return html;
+  }
+
+  function attachOverviewEvents() {
+    document.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', () => deleteExpense(btn.dataset.del));
+    });
+  }
+
+  function addExpenseHTML() {
+    return `
+      <div class="pl-notice" id="pl-dup-notice"></div>
+      <form id="pl-expense-form">
+        <div class="pl-form-group">
+          <label class="pl-form-label">Item name</label>
+          <input class="pl-input" id="pl-f-name" type="text" placeholder="e.g. Milk, Rice, Detergent" autocomplete="off" required />
+        </div>
+        <div class="pl-row2">
+          <div class="pl-form-group">
+            <label class="pl-form-label">Category</label>
+            <select class="pl-select" id="pl-f-category">
+              ${CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="pl-form-group">
+            <label class="pl-form-label">Cost</label>
+            <input class="pl-input" id="pl-f-cost" type="number" step="0.01" min="0" placeholder="0.00" required />
+          </div>
+        </div>
+        <div class="pl-row2">
+          <div class="pl-form-group">
+            <label class="pl-form-label">Quantity bought</label>
+            <input class="pl-input" id="pl-f-qty" type="number" step="0.1" min="0.1" value="1" required />
+          </div>
+          <div class="pl-form-group">
+            <label class="pl-form-label">Unit</label>
+            <select class="pl-select" id="pl-f-unit">
+              ${UNITS.map(u => `<option value="${u}">${u}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div class="pl-checkbox-row">
+          <input type="checkbox" id="pl-f-track" checked />
+          <label for="pl-f-track">Track this in my pantry</label>
+        </div>
+        <div class="pl-form-group" id="pl-threshold-group">
+          <label class="pl-form-label">Reorder when quantity drops to</label>
+          <input class="pl-input" id="pl-f-threshold" type="number" step="0.1" min="0" value="1" />
+        </div>
+        <button type="submit" class="pl-submit-btn">Log expense</button>
+      </form>
+    `;
+  }
+
+  function attachAddEvents() {
+    const nameInput = document.getElementById('pl-f-name');
+    const notice = document.getElementById('pl-dup-notice');
+    const trackCheckbox = document.getElementById('pl-f-track');
+    const thresholdGroup = document.getElementById('pl-threshold-group');
+
+    trackCheckbox.addEventListener('change', () => {
+      thresholdGroup.style.display = trackCheckbox.checked ? 'block' : 'none';
+    });
+
+    nameInput.addEventListener('input', () => {
+      const key = slug(nameInput.value);
+      const existing = data.pantry[key];
+      if (existing && key.length > 0) {
+        const st = stockStatus(existing);
+        const stLabel = st === 'out' ? 'out of stock' : st === 'low' ? 'running low' : 'in stock';
+        notice.innerHTML = `You already have <b>${existing.quantity} ${existing.unit}</b> of <b>${escapeHTML(existing.name)}</b> (${stLabel}), last bought ${niceDate(existing.lastPurchased)}. Buying more will add to this stock.`;
+        notice.classList.add('pl-show');
+      } else {
+        notice.classList.remove('pl-show');
+      }
+    });
+
+    document.getElementById('pl-expense-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = nameInput.value.trim();
+      const category = document.getElementById('pl-f-category').value;
+      const cost = parseFloat(document.getElementById('pl-f-cost').value);
+      const qty = parseFloat(document.getElementById('pl-f-qty').value);
+      const unit = document.getElementById('pl-f-unit').value;
+      const trackPantry = trackCheckbox.checked;
+      const lowThreshold = parseFloat(document.getElementById('pl-f-threshold').value) || 0;
+
+      if (!name || isNaN(cost) || isNaN(qty)) return;
+
+      addExpense({ name, category, cost, qty, unit, trackPantry, lowThreshold });
+      activeTab = 'overview';
+      render();
+    });
+  }
+
+  function pantryHTML() {
+    const items = Object.entries(data.pantry);
+    if (items.length === 0) {
+      return `<div class="pl-empty"><div class="pl-empty-icon">🥫</div>Your pantry is empty.<br>Items you buy and choose to track will show up here automatically.</div>`;
+    }
+    const order = { out: 0, low: 1, ok: 2 };
+    items.sort((a, b) => {
+      const sa = stockStatus(a[1]), sb = stockStatus(b[1]);
+      if (order[sa] !== order[sb]) return order[sa] - order[sb];
+      return a[1].name.localeCompare(b[1].name);
+    });
+
+    return items.map(([key, p]) => {
+      const st = stockStatus(p);
+      const stampLabel = st === 'out' ? 'OUT OF STOCK' : st === 'low' ? 'LOW STOCK' : 'STOCKED';
+      return `
+      <div class="pl-pantry-card">
+        <div class="pl-pantry-top">
+          <div>
+            <div class="pl-pantry-name">${escapeHTML(p.name)}</div>
+            <div class="pl-pantry-cat">${p.category}</div>
+          </div>
+          <span class="pl-stamp pl-stamp-${st}">${stampLabel}</span>
+        </div>
+        <div class="pl-pantry-bottom">
+          <div class="pl-qty-controls">
+            <button class="pl-qty-btn" data-adj="${key}:-1">−</button>
+            <span class="pl-qty-val">${p.quantity} ${p.unit}</span>
+            <button class="pl-qty-btn" data-adj="${key}:1">+</button>
+          </div>
+          <span class="pl-pantry-meta">bought ${niceDate(p.lastPurchased)}</span>
+        </div>
+        <div style="margin-top:8px;">
+          <button class="pl-pantry-remove" data-remove="${key}">Remove from pantry</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function attachPantryEvents() {
+    document.querySelectorAll('[data-adj]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const [key, delta] = btn.dataset.adj.split(':');
+        adjustPantryQty(key, parseFloat(delta));
+      });
+    });
+    document.querySelectorAll('[data-remove]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (confirm('Remove this item from your pantry tracker?')) removePantryItem(btn.dataset.remove);
+      });
+    });
+  }
+
+  function escapeHTML(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  loadData();
+})();
+</script>
+
+
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {
+        // offline caching is a nice-to-have; app still works without it
+      });
+    });
+  }
+</script>
+</body>
+</html>
