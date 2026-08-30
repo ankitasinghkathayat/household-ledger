@@ -208,6 +208,15 @@ html, body {
 }
 .pl-notice.pl-show { display: block; }
 .pl-notice b { color: #4a3a0e; }
+.pl-mini-btn {
+  font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.03em; padding: 6px 12px;
+  border-radius: 6px; border: 1.5px solid var(--mustard); background: var(--paper-card);
+  color: #6b5215; cursor: pointer;
+}
+.pl-mini-btn:hover { background: var(--mustard); color: #fff; }
+.pl-mini-btn-quiet { border-color: var(--rule); color: var(--ink-soft); }
+.pl-mini-btn-quiet:hover { background: var(--rule); color: var(--ink); }
 
 .pl-checkbox-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
 .pl-checkbox-row label { font-size: 13px; color: var(--ink); cursor: pointer; }
@@ -287,14 +296,16 @@ html, body {
   const UNITS = ['pcs','pack','kg','g','l','ml','box','bottle','bag'];
   const STORE_KEY = 'household-ledger-data';
 
-  let data = { budget: 600, expenses: [], pantry: {} };
+  let data = { baseBudget: 600, months: {}, expenses: [], pantry: {} };
   let activeTab = 'overview';
   let loaded = false;
+  let showCarryoverInput = false;
 
   const root = document.getElementById('plRoot');
 
   function slug(name) { return name.trim().toLowerCase(); }
-  function fmt(n) { return '$' + (Math.round(n * 100) / 100).toFixed(2); }
+  function fmt(n) { return '€' + (Math.round(n * 100) / 100).toFixed(2); }
+  function round2(n) { return Math.round(n * 100) / 100; }
   function todayISO() { return new Date().toISOString().slice(0,10); }
   function niceDate(iso) {
     const d = new Date(iso + 'T00:00:00');
@@ -303,10 +314,57 @@ html, body {
   function monthLabel() {
     return new Date().toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   }
+  function monthKey(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+  function prevMonthKey(key) {
+    const [y, m] = key.split('-').map(Number);
+    const d = new Date(y, m - 2, 1);
+    return monthKey(d);
+  }
+  function monthNameFromKey(key) {
+    const [y, m] = key.split('-').map(Number);
+    const d = new Date(y, m - 1, 1);
+    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  }
   function isThisMonth(iso) {
     const d = new Date(iso + 'T00:00:00');
     const n = new Date();
     return d.getMonth() === n.getMonth() && d.getFullYear() === n.getFullYear();
+  }
+  function spentForMonth(key) {
+    return data.expenses
+      .filter(e => e.date.slice(0, 7) === key)
+      .reduce((s, e) => s + e.cost, 0);
+  }
+
+  // Ensures a month record exists for `key`, seeded from the recurring base budget.
+  function ensureMonth(key) {
+    if (!data.months) data.months = {};
+    if (!data.months[key]) {
+      const prevKey = prevMonthKey(key);
+      const hasPrev = !!data.months[prevKey];
+      data.months[key] = { baseBudget: data.baseBudget, carryover: 0, carryoverHandled: !hasPrev };
+    }
+    return data.months[key];
+  }
+
+  // Returns the leftover amount from the previous month that's still waiting
+  // on a decision, or 0 if there's nothing to offer (no prior month, or it
+  // ran over budget instead of under).
+  function pendingLeftover(key) {
+    const m = data.months[key];
+    if (!m || m.carryoverHandled) return 0;
+    const prevKey = prevMonthKey(key);
+    const prev = data.months[prevKey];
+    if (!prev) { m.carryoverHandled = true; return 0; }
+    const prevBudget = prev.baseBudget + prev.carryover;
+    const leftover = round2(prevBudget - spentForMonth(prevKey));
+    if (leftover <= 0) { m.carryoverHandled = true; return 0; }
+    return leftover;
+  }
+
+  function monthBudget(key) {
+    const m = data.months[key];
+    return round2(m.baseBudget + m.carryover);
   }
 
   // Local-storage backed persistence — this app is fully self-contained,
@@ -331,11 +389,18 @@ html, body {
       const res = await storage.get(STORE_KEY);
       if (res && res.value) {
         const parsed = JSON.parse(res.value);
-        data = Object.assign({ budget: 600, expenses: [], pantry: {} }, parsed);
+        data = Object.assign({ baseBudget: 600, months: {}, expenses: [], pantry: {} }, parsed);
       }
     } catch (e) {
       // corrupt or missing data — start fresh
     }
+    // Migrate old single-`budget` field (pre-carryover version) into the new model.
+    if (typeof data.budget === 'number' && !data.months) {
+      data.baseBudget = data.budget;
+      data.months = {};
+    }
+    if (!data.months) data.months = {};
+    delete data.budget;
     loaded = true;
     render();
   }
@@ -386,9 +451,33 @@ html, body {
 
   // ---------- Actions ----------
 
-  function setBudget(val) {
+  function setBaseBudget(key, val) {
     const n = parseFloat(val);
-    data.budget = isNaN(n) ? 0 : n;
+    const amount = isNaN(n) ? 0 : n;
+    data.baseBudget = amount;
+    data.months[key].baseBudget = amount;
+    saveData();
+    render();
+  }
+
+  function addCarryover(key, amount) {
+    const m = data.months[key];
+    m.carryover = round2(m.carryover + amount);
+    m.carryoverHandled = true;
+    showCarryoverInput = false;
+    saveData();
+    render();
+  }
+
+  function skipCarryover(key) {
+    data.months[key].carryoverHandled = true;
+    saveData();
+    render();
+  }
+
+  function setCarryover(key, val) {
+    const n = parseFloat(val);
+    data.months[key].carryover = isNaN(n) ? 0 : round2(n);
     saveData();
     render();
   }
@@ -449,7 +538,7 @@ html, body {
 
   function resetAll() {
     if (!confirm('This clears your budget, expenses, and pantry data permanently. Continue?')) return;
-    data = { budget: 600, expenses: [], pantry: {} };
+    data = { baseBudget: 600, months: {}, expenses: [], pantry: {} };
     saveData();
     render();
   }
@@ -459,11 +548,37 @@ html, body {
   function render() {
     if (!loaded) return;
 
-    const spentThisMonth = data.expenses.filter(e => isThisMonth(e.date)).reduce((s,e) => s + e.cost, 0);
-    const remaining = data.budget - spentThisMonth;
-    const pct = data.budget > 0 ? Math.min(100, (spentThisMonth / data.budget) * 100) : 0;
+    const key = monthKey(new Date());
+    ensureMonth(key);
+    const leftover = pendingLeftover(key); // may flip carryoverHandled as a side effect
+    const m = data.months[key];
+    saveData();
+    const budget = monthBudget(key);
+    const spentThisMonth = spentForMonth(key);
+    const remaining = round2(budget - spentThisMonth);
+    const pct = budget > 0 ? Math.min(100, (spentThisMonth / budget) * 100) : 0;
     const over = remaining < 0;
     const lowCount = lowStockCount();
+    const hasCarryover = m.carryover !== 0;
+
+    let carryoverBannerHTML = '';
+    if (leftover > 0) {
+      const prevLabel = monthNameFromKey(prevMonthKey(key));
+      carryoverBannerHTML = `
+        <div class="pl-notice pl-show" id="pl-carryover-banner">
+          You had <b>${fmt(leftover)}</b> left over from ${prevLabel}. Add it to this month's budget?
+          <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button type="button" class="pl-mini-btn" id="pl-carry-all">Add all</button>
+            <button type="button" class="pl-mini-btn" id="pl-carry-part">Add some</button>
+            <button type="button" class="pl-mini-btn pl-mini-btn-quiet" id="pl-carry-skip">Skip</button>
+          </div>
+          ${showCarryoverInput ? `
+            <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+              <input class="pl-input pl-mono" id="pl-carry-amount" type="number" step="0.01" min="0" max="${leftover}" value="${leftover}" style="max-width:110px;padding:6px 8px;" />
+              <button type="button" class="pl-mini-btn" id="pl-carry-confirm">Add</button>
+            </div>` : ''}
+        </div>`;
+    }
 
     root.innerHTML = `
       <div class="pl-header">
@@ -471,11 +586,23 @@ html, body {
       </div>
 
       <div class="pl-receipt">
+        ${carryoverBannerHTML}
         <div class="pl-line">
-          <span class="pl-label">Monthly budget</span>
+          <span class="pl-label">Base budget</span>
           <span class="pl-dots"></span>
-          <span class="pl-val pl-mono" id="pl-budget-display" style="cursor:pointer;text-decoration:underline dotted;" title="Click to edit">${fmt(data.budget)}</span>
+          <span class="pl-val pl-mono" id="pl-budget-display" style="cursor:pointer;text-decoration:underline dotted;" title="Click to edit">${fmt(m.baseBudget)}</span>
         </div>
+        ${hasCarryover ? `
+        <div class="pl-line">
+          <span class="pl-label">Carried over</span>
+          <span class="pl-dots"></span>
+          <span class="pl-val pl-mono" id="pl-carryover-display" style="cursor:pointer;text-decoration:underline dotted;color:var(--sage);" title="Click to edit">+${fmt(m.carryover)}</span>
+        </div>
+        <div class="pl-line">
+          <span class="pl-label">Total budget</span>
+          <span class="pl-dots"></span>
+          <span class="pl-val">${fmt(budget)}</span>
+        </div>` : ''}
         <div class="pl-line">
           <span class="pl-label">Spent this month</span>
           <span class="pl-dots"></span>
@@ -511,25 +638,66 @@ html, body {
   }
 
   function attachHeaderEvents() {
+    const key = monthKey(new Date());
     document.querySelectorAll('.pl-tab').forEach(btn => {
       btn.addEventListener('click', () => { activeTab = btn.dataset.tab; render(); });
     });
     document.getElementById('pl-reset-btn').addEventListener('click', resetAll);
+
     const budgetDisplay = document.getElementById('pl-budget-display');
     budgetDisplay.addEventListener('click', () => {
       const input = document.createElement('input');
       input.type = 'number';
       input.step = '0.01';
-      input.value = data.budget;
+      input.value = data.months[key].baseBudget;
       input.className = 'pl-mono';
       input.style.cssText = 'width:90px;font-weight:600;font-size:14px;border:1px solid var(--rule);border-radius:4px;padding:1px 4px;';
       budgetDisplay.replaceWith(input);
       input.focus();
       input.select();
-      const commit = () => { setBudget(input.value); };
+      const commit = () => { setBaseBudget(key, input.value); };
       input.addEventListener('blur', commit);
       input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
     });
+
+    const carryoverDisplay = document.getElementById('pl-carryover-display');
+    if (carryoverDisplay) {
+      carryoverDisplay.addEventListener('click', () => {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = '0.01';
+        input.value = data.months[key].carryover;
+        input.className = 'pl-mono';
+        input.style.cssText = 'width:90px;font-weight:600;font-size:14px;border:1px solid var(--rule);border-radius:4px;padding:1px 4px;';
+        carryoverDisplay.replaceWith(input);
+        input.focus();
+        input.select();
+        const commit = () => { setCarryover(key, input.value); };
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+      });
+    }
+
+    const carryAll = document.getElementById('pl-carry-all');
+    if (carryAll) {
+      carryAll.addEventListener('click', () => addCarryover(key, pendingLeftover(key)));
+    }
+    const carryPart = document.getElementById('pl-carry-part');
+    if (carryPart) {
+      carryPart.addEventListener('click', () => { showCarryoverInput = true; render(); });
+    }
+    const carrySkip = document.getElementById('pl-carry-skip');
+    if (carrySkip) {
+      carrySkip.addEventListener('click', () => skipCarryover(key));
+    }
+    const carryConfirm = document.getElementById('pl-carry-confirm');
+    if (carryConfirm) {
+      carryConfirm.addEventListener('click', () => {
+        const amountInput = document.getElementById('pl-carry-amount');
+        const amount = Math.max(0, parseFloat(amountInput.value) || 0);
+        addCarryover(key, amount);
+      });
+    }
   }
 
   function renderBody(spentThisMonth) {
